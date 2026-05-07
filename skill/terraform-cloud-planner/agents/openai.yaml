@@ -1,0 +1,4 @@
+interface:
+  display_name: "Terraform Cloud Planner"
+  short_description: "Plan Terraform with cloud intake"
+  default_prompt: "Use terraform-cloud-planner to inspect the application stack, interview me about cloud requirements, and produce a normalized Terraform plan before editing infrastructure."
