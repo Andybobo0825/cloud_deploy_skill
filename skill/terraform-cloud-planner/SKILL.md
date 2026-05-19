@@ -1,6 +1,6 @@
 ---
 name: terraform-cloud-planner
-description: Guided Terraform/IaC planning workflow for cloud infrastructure creation or modification. Use when Codex is asked to create, generate, scaffold, or change Terraform after first understanding the application's language/framework, deployment shape, environment purpose (demo/staging/production), cloud resource count, VM/container sizing, scale, AWS region, services, cost/HA/security constraints, and then producing a normalized Terraform plan before editing infra files.
+description: Guided Terraform/IaC planning workflow for cloud infrastructure creation or modification, with an optional AWS Well-Architected IaC review gate after Terraform edits. Use when Codex is asked to create, generate, scaffold, or change Terraform after first understanding the application's language/framework, deployment shape, environment purpose (demo/staging/production), cloud resource count, VM/container sizing, scale, AWS region, services, cost/HA/security constraints, and then producing a normalized Terraform plan before editing infra files.
 ---
 
 # Terraform Cloud Planner
@@ -42,7 +42,28 @@ Create Terraform only after a short architecture discovery and brainstorming int
    - Do not create production-grade resources when the profile says demo unless requested.
    - Do not use credentials or apply infrastructure unless the user explicitly asks and authority exists.
 
-5. **Verify.**
+5. **Run the Well-Architected IaC review gate when AWS Terraform is present.**
+   - If the sibling `well-architected-iac-reviewer` skill exists, run its bundled scanner against the changed Terraform root before final handoff:
+
+     ```bash
+     python3 ../well-architected-iac-reviewer/scripts/well_architected_iac_review.py <terraform-root> \
+       --output architecture-review.md \
+       --fail-on high
+     ```
+
+   - If this skill is installed without the sibling reviewer but an external reviewer repo is available, use that repo directly:
+
+     ```bash
+     PYTHONPATH=<aws-well-architected-iac-reviewer>/src \
+       python3 -m iac_reviewer <terraform-root> \
+       --output architecture-review.md \
+       --fail-on high
+     ```
+
+   - Treat high-severity findings as blocking for generated Terraform unless the user explicitly accepts the risk.
+   - For demo/portfolio Terraform, prefer low-cost remediations and document intentional exceptions in `infra/terraform-intake.md`.
+
+6. **Verify.**
    - Run `terraform fmt -recursive` for changed Terraform.
    - Run `terraform validate` when provider/init context is available.
    - If validation cannot run, record the reason and run the next-best static check.
@@ -81,6 +102,18 @@ After stack detection, ask something like:
 5. 需要哪些服務：ALB、ECR、ECS、RDS、S3、CloudWatch、Secrets、DNS/TLS、CI/CD？
 6. 成本上限/清除策略：是否要最低成本並方便 terraform destroy？
 ```
+
+## Well-Architected Review Gate
+
+Use this as the post-generation safety check for AWS Terraform. The gate is intentionally static and local: it scans `*.tf` files for AWS Well-Architected risk signals without AWS credentials, provider downloads, Terraform state, or `terraform apply`.
+
+Recommended policy:
+
+- Demo/portfolio: run with `--fail-on high`; fix high findings, summarize medium/low findings as improvement notes.
+- Staging/production: run with `--fail-on medium` unless the user has an explicit risk-acceptance process.
+- If no Terraform files exist yet, record the gate as not applicable and continue with normal planning/verification.
+
+The final handoff should include the review report path, finding counts by severity, and whether the gate passed.
 
 ## Demo Defaults
 

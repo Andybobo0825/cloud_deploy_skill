@@ -1,4 +1,4 @@
 interface:
   display_name: "Terraform Cloud Planner"
-  short_description: "Plan Terraform with cloud intake"
-  default_prompt: "Use terraform-cloud-planner to inspect the application stack, interview me about cloud requirements, and produce a normalized Terraform plan before editing infrastructure."
+  short_description: "Plan Terraform with review gate"
+  default_prompt: "Use terraform-cloud-planner to inspect the application stack, interview me about cloud requirements, produce a normalized Terraform plan before editing infrastructure, then run the Well-Architected IaC review gate after Terraform changes when AWS Terraform is present."

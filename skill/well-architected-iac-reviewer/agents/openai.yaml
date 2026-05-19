@@ -1,0 +1,4 @@
+interface:
+  display_name: "Well-Architected IaC Reviewer"
+  short_description: "Scan AWS Terraform risks"
+  default_prompt: "Use well-architected-iac-reviewer to scan the Terraform scope, produce architecture-review.md, summarize findings by AWS Well-Architected pillar, and identify blocking remediation before deployment."
