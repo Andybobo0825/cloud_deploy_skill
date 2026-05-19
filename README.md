@@ -1,26 +1,35 @@
 # Cloud Deploy Skill
 
-`cloud_deploy_skill` is a Codex skill showcase for safer AWS Terraform work. It packages two complementary skills:
+`cloud_deploy_skill` 是一個 Codex Skill 展示作品，目標是讓 AI 協助產生 AWS Terraform 時，不只是「直接生 IaC」，而是先完成部署規劃，再做部署前的 Well-Architected 風格靜態審查。
 
-1. **`terraform-cloud-planner`** — plans cloud deployment before editing Terraform.
-2. **`well-architected-iac-reviewer`** — scans generated or existing AWS Terraform for AWS Well-Architected risk signals before deployment.
+本 repo 目前包含兩個互補的 skill：
 
-Together they demonstrate an end-to-end AI-assisted IaC workflow:
+1. **`terraform-cloud-planner`**：在編輯 Terraform 前，先偵測應用程式 stack、訪談部署需求，並產生標準化 Terraform implementation profile。
+2. **`well-architected-iac-reviewer`**：在 Terraform 產生或修改後，於部署前掃描 AWS IaC 風險，輸出 `architecture-review.md`。
 
-> Detect the application stack → interview for deployment requirements → create a Terraform implementation profile → edit Terraform → run a local Well-Architected review gate → report risks and verification evidence.
+整體展示的是一條 AI-assisted IaC workflow：
 
-## Why this exists
+> 偵測應用程式 stack → 訪談部署需求 → 建立 Terraform 實作規格 → 編輯 Terraform → 執行本機 Well-Architected review gate → 回報風險與驗證證據。
 
-Directly asking an AI agent to “create Terraform” often produces infrastructure that is technically plausible but poorly scoped: missing runtime facts, unclear environment goals, expensive defaults, weak network boundaries, no tagging, no logs, no budget, or no review evidence.
+## 為什麼需要這個 skill
 
-This skill package adds guardrails:
+直接要求 AI「幫我產生 Terraform」很容易得到看似可用、但實際上缺少脈絡與治理邊界的基礎設施程式碼，例如：
 
-- **Intake before infrastructure**: understand app stack, region, environment, runtime model, sizing, services, security, HA, and cost constraints before Terraform edits.
-- **Demo vs production separation**: use low-cost, easy-teardown defaults for portfolio/demo work, and require deeper HA/security/backup/observability decisions for production.
-- **Static review before handoff**: scan Terraform locally for common AWS Well-Architected issues without AWS credentials or `terraform apply`.
-- **Reviewable artifacts**: produce `infra/terraform-intake.md` and `architecture-review.md` so decisions and risks are visible in PRs or portfolio demos.
+- 沒有確認應用程式語言、框架、runtime port 或部署型態
+- 沒有區分 demo、staging、production 的需求差異
+- 沒有確認 AWS region、服務清單、成本限制、HA / security 條件
+- demo 專案被過度設計成 production-grade 架構
+- 缺少 tags、logs、alarms、budget、backup 等基本訊號
+- Terraform 產生後沒有 review report 或驗證紀錄
 
-## Packaged skills
+這個 skill package 加入幾個 guardrails：
+
+- **先 intake，再產生 infra**：在 Terraform edits 前先確認 app stack、region、environment、runtime model、sizing、服務、安全、HA、成本限制。
+- **區分 demo 與 production**：demo / portfolio 預設低成本、容易 teardown；production 則要求更完整的 HA、安全、備份、監控與成本確認。
+- **部署前靜態審查**：用本機 scanner 掃描 Terraform，找出常見 AWS Well-Architected 風險，不需要 AWS credentials，也不會執行 `terraform apply`。
+- **留下可審查產物**：輸出 `infra/terraform-intake.md` 與 `architecture-review.md`，方便放進 PR、作品集或面試討論。
+
+## Skill 結構
 
 ```text
 skill/
@@ -36,33 +45,40 @@ skill/
     └── scripts/well_architected_iac_review.py
 ```
 
-### terraform-cloud-planner
+## `terraform-cloud-planner`
 
-Use this when you want Codex to create, modify, or scaffold Terraform/IaC.
+當你需要 Codex 建立、修改或 scaffold Terraform / IaC 時，使用這個 skill。
 
-It forces this sequence:
+它會強制採用以下流程：
 
-1. Run stack detection with `scripts/detect_stack.py`.
-2. Inspect existing infra hints such as `infra/`, `*.tf`, Dockerfile, Compose, and CI files.
-3. Ask only the required deployment questions.
-4. Normalize decisions into `infra/terraform-intake.md`.
-5. Edit Terraform only after the profile is clear.
-6. Run the Well-Architected review gate when AWS Terraform is present.
-7. Run `terraform fmt` and `terraform validate` when possible.
+1. 執行 `scripts/detect_stack.py` 偵測目前專案技術棧。
+2. 檢查既有 infra hints，例如 `infra/`、`*.tf`、Dockerfile、Compose、CI files。
+3. 只詢問必要的部署需求問題。
+4. 將決策整理成 `infra/terraform-intake.md`。
+5. 在 profile 明確後才編輯 Terraform。
+6. 若存在 AWS Terraform，執行 Well-Architected review gate。
+7. 可行時執行 `terraform fmt` 與 `terraform validate`。
 
-Typical prompt:
+典型 prompt：
 
 ```text
 Use terraform-cloud-planner to inspect this app, interview me about AWS deployment requirements, produce the Terraform implementation profile, then create the Terraform files and run the review gate.
 ```
 
-### well-architected-iac-reviewer
+## `well-architected-iac-reviewer`
 
-Use this after Terraform is created or changed, before deployment/apply, or when you want a local AWS Well-Architected-style IaC review.
+當 Terraform 已經產生或修改完成、準備部署前，使用這個 skill 進行本機靜態審查。
 
-The scanner checks Terraform source text only. It does **not** call AWS APIs, require AWS credentials, download providers, inspect state, run `terraform plan`, or run `terraform apply`.
+這個 scanner 只檢查 Terraform source text。它不會：
 
-It produces `architecture-review.md` with findings mapped to AWS Well-Architected pillars:
+- 呼叫 AWS API
+- 要求 AWS credentials
+- 下載 Terraform providers
+- 讀取 Terraform state
+- 執行 `terraform plan`
+- 執行 `terraform apply`
+
+它會產生 `architecture-review.md`，並把 findings 對應到 AWS Well-Architected pillar：
 
 - Security
 - Reliability
@@ -70,7 +86,7 @@ It produces `architecture-review.md` with findings mapped to AWS Well-Architecte
 - Cost Optimization
 - Performance Efficiency
 
-Run directly:
+可直接執行：
 
 ```bash
 python3 skill/well-architected-iac-reviewer/scripts/well_architected_iac_review.py infra \
@@ -78,48 +94,52 @@ python3 skill/well-architected-iac-reviewer/scripts/well_architected_iac_review.
   --fail-on high
 ```
 
-Use `--fail-on none` for advisory reports, `--fail-on high` for demo/portfolio guardrails, and `--fail-on medium` for stricter staging/production gates.
+建議使用方式：
 
-## End-to-end workflow
+- `--fail-on none`：只產生 advisory report，不阻擋流程
+- `--fail-on high`：適合 demo / portfolio 的部署前 guardrail
+- `--fail-on medium`：適合 staging / production 的較嚴格檢查
+
+## 端到端流程
 
 ```mermaid
 flowchart TD
-  A[User asks for Terraform/cloud deployment] --> B[terraform-cloud-planner]
-  B --> C[Detect app stack and existing infra]
-  C --> D[Cloud deployment intake]
+  A[使用者要求建立 Terraform / cloud deployment] --> B[terraform-cloud-planner]
+  B --> C[偵測 app stack 與既有 infra]
+  C --> D[雲端部署需求訪談]
   D --> E[infra/terraform-intake.md]
-  E --> F[Create or modify Terraform]
+  E --> F[建立或修改 Terraform]
   F --> G[well-architected-iac-reviewer]
   G --> H[architecture-review.md]
-  H --> I[Fix findings or document exceptions]
+  H --> I[修正 findings 或記錄例外]
   I --> J[fmt / validate / final handoff]
 ```
 
-## Example review findings
+## 目前可偵測的風險範例
 
-The reviewer can flag signals such as:
-
-| Rule ID | Pillar | Example risk |
+| Rule ID | Pillar | 風險範例 |
 | --- | --- | --- |
-| `SEC-S3-PUBLIC` | Security | S3 bucket ACL or policy exposes data publicly. |
-| `SEC-SG-PUBLIC-INGRESS` | Security | Security group opens SSH, database, Redis, or all ports to `0.0.0.0/0`. |
-| `REL-RDS-BACKUP` | Reliability | RDS has no backup retention period. |
-| `REL-RDS-MULTIAZ` | Reliability | RDS instance lacks explicit Multi-AZ signal. |
-| `OPS-CW-LOGS` / `OPS-CW-ALARMS` | Operational Excellence | Terraform lacks CloudWatch logs or alarms. |
-| `OPS-TAGS` | Operational Excellence | AWS resources lack tags for ownership/cost allocation. |
-| `COST-EC2-OVERSIZED` | Cost Optimization | Demo workload uses very large EC2 instance classes. |
-| `COST-BUDGET` | Cost Optimization | Terraform lacks an AWS Budget resource. |
-| `PERF-SCALING` / `PERF-CACHE` | Performance Efficiency | Compute exists without autoscaling or cache/read-optimization signal. |
+| `SEC-S3-PUBLIC` | Security | S3 bucket ACL 或 policy 讓資料公開。 |
+| `SEC-SG-PUBLIC-INGRESS` | Security | Security Group 對 `0.0.0.0/0` 開放 SSH、database、Redis 或 all ports。 |
+| `REL-RDS-BACKUP` | Reliability | RDS 沒有設定 backup retention。 |
+| `REL-RDS-MULTIAZ` | Reliability | RDS instance 缺少明確 Multi-AZ 訊號。 |
+| `OPS-CW-LOGS` / `OPS-CW-ALARMS` | Operational Excellence | Terraform 缺少 CloudWatch logs 或 alarms。 |
+| `OPS-TAGS` | Operational Excellence | AWS resources 缺少 ownership / cost allocation tags。 |
+| `COST-EC2-OVERSIZED` | Cost Optimization | Demo workload 使用過大的 EC2 instance class。 |
+| `COST-BUDGET` | Cost Optimization | Terraform 缺少 AWS Budget resource。 |
+| `PERF-SCALING` / `PERF-CACHE` | Performance Efficiency | 有 compute 但缺少 autoscaling 或 cache/read-optimization 訊號。 |
 
-## How this differs from AWS Well-Architected Tool
+## 與 AWS Well-Architected Tool 的差異
 
-This package is an early **IaC review gate**. It scans local Terraform before deployment and is useful in PRs, demos, and AI-generated infrastructure workflows.
+這個 skill package 是早期的 **IaC review gate**。它適合在 PR、demo、portfolio 或 AI-generated infrastructure workflow 裡，於部署前掃描本機 Terraform。
 
-AWS Well-Architected Tool is the official AWS service for full workload reviews, lenses, milestones, risk tracking, and improvement plans. This package does not replace it; it shifts some obvious checks left into the Terraform authoring process.
+AWS Well-Architected Tool 則是 AWS 官方服務，用來做完整 workload review、lenses、milestones、risk tracking 與 improvement plans。
 
-## Installation / usage with Codex
+所以這個 skill **不是取代 AWS Well-Architected Tool**，而是把一部分明顯的 Terraform 風險檢查左移到 IaC authoring 階段。
 
-Copy or install the skill folders under a Codex-readable skills directory, for example:
+## 安裝 / 使用方式
+
+將 skill folders 複製到 Codex 可讀取的 skills 目錄，例如：
 
 ```bash
 mkdir -p ~/.codex/skills
@@ -127,19 +147,21 @@ cp -R skill/terraform-cloud-planner ~/.codex/skills/
 cp -R skill/well-architected-iac-reviewer ~/.codex/skills/
 ```
 
-Then ask Codex to use either skill by name:
+之後可以直接要求 Codex 使用 skill：
 
 ```text
 Use terraform-cloud-planner to plan AWS Terraform for this app.
 ```
 
+或：
+
 ```text
 Use well-architected-iac-reviewer to scan my Terraform and produce architecture-review.md.
 ```
 
-## Validation commands
+## 驗證指令
 
-For this skill repository itself:
+針對這個 skill repo 本身：
 
 ```bash
 python3 skill/terraform-cloud-planner/scripts/detect_stack.py .
@@ -149,7 +171,7 @@ python3 -m py_compile \
   skill/well-architected-iac-reviewer/scripts/well_architected_iac_review.py
 ```
 
-For a Terraform target repository:
+針對實際 Terraform target repo：
 
 ```bash
 terraform fmt -recursive
@@ -159,9 +181,9 @@ python3 <path-to-skill>/well-architected-iac-reviewer/scripts/well_architected_i
   --fail-on high
 ```
 
-## Safety notes
+## 安全邊界
 
-- The skills do not apply infrastructure unless the user explicitly asks and valid authority exists.
-- The reviewer does not require cloud credentials.
-- Findings are review prompts, not a complete formal Well-Architected Review.
-- Production infrastructure should still go through normal security, compliance, cost, and operational review processes.
+- Skill 不會在未明確授權的情況下 apply infrastructure。
+- Reviewer 不需要 cloud credentials。
+- Findings 是 review prompts，不是完整正式的 AWS Well-Architected Review。
+- Production infrastructure 仍應通過正式的 security、compliance、cost 與 operational review。
